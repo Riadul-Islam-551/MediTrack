@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import AppHeader from "@/components/AppHeader";
+import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
   title: "MediTrack - AI Health Platform",
@@ -19,6 +20,9 @@ export default function RootLayout({
           <AppHeader></AppHeader>
         </header>
         <main>{children}</main>
+        <footer>
+          <Footer></Footer>
+        </footer>
       </body>
     </html>
   );

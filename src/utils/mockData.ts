@@ -1,4 +1,4 @@
-import { PatientProfile } from "@/app/types/medical";
+import { PatientProfile } from '@/app/types/medical';
 
 export const initialMockPatients: PatientProfile[] = [
   {

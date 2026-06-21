@@ -1,13 +1,108 @@
 "use client";
 
 import React, { useState } from "react";
+import {
+  MedicalRecord,
+  PatientProfile,
+  SystemAuditLog,
+} from "@/app/types/medical";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { parsePrescriptionAction } from "../actions";
 
 export default function PatientPortal() {
+  const { state, updateState } = useLocalStorage();
   const [selectedPatientId, setSelectedPatientId] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  if (!state) {
+    return (
+      <div className="p-12 text-center text-slate-500 text-sm font-medium animate-pulse tracking-wide">
+        Initializing secure local clinical ledger...
+      </div>
+    );
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!selectedPatientId) {
+      setErrorMessage(
+        "Please assign a target active Patient Profile before uploading documents.",
+      );
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async () => {
+      const base64Raw = reader.result as string;
+      const base64Data = base64Raw.split(",")[1];
+
+      const response = await parsePrescriptionAction(
+        base64Data,
+        file.type,
+        file.name,
+      );
+      const timestamp = new Date().toLocaleString();
+      const newLogId = "LOG-" + Math.floor(Math.random() * 90000 + 10000);
+
+      if (response.success && response.data) {
+        const newRecord: MedicalRecord = {
+          recordId: "REC-" + Math.floor(Math.random() * 90000 + 10000),
+          date: response.data.date,
+          doctorName: response.data.doctorName,
+          patientCase: response.data.patientCase,
+          vitals: response.data.vitals,
+          medicines: response.data.medicines,
+          testResults: response.data.testResults,
+        };
+
+        const updatedPatients = state.patients.map((p: PatientProfile) => {
+          if (p.patientId === selectedPatientId) {
+            return { ...p, records: [newRecord, ...p.records] };
+          }
+          return p;
+        });
+
+        const newLog: SystemAuditLog = {
+          id: newLogId,
+          timestamp,
+          status: "SUCCESS",
+          fileName: file.name,
+        };
+
+        updateState({
+          patients: updatedPatients,
+          logs: [newLog, ...state.logs],
+        });
+        setSuccessMessage(
+          `Document analyzed successfully. Medical records have been securely updated.`,
+        );
+      } else {
+        const failedLog: SystemAuditLog = {
+          id: newLogId,
+          timestamp,
+          status: "FAILED",
+          fileName: file.name,
+          errorMessage: response.error || "Unknown Pipeline Failure",
+        };
+        updateState({ ...state, logs: [failedLog, ...state.logs] });
+        setErrorMessage(
+          response.error ||
+            "The AI agent could not parse the format structure. Please verify the document clarity.",
+        );
+      }
+      setLoading(false);
+    };
+  };
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
@@ -43,7 +138,20 @@ export default function PatientPortal() {
                 setErrorMessage(null);
                 setSuccessMessage(null);
               }}
-            ></select>
+            >
+              <option value="" className="text-slate-500">
+                -- Select destination context profile --
+              </option>
+              {state.patients.map((p) => (
+                <option
+                  key={p.patientId}
+                  value={p.patientId}
+                  className="bg-slate-950 text-slate-200"
+                >
+                  {p.fullName} ({p.patientId}) — Status: {p.status}
+                </option>
+              ))}
+            </select>
             <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
               <svg
                 className="size-4"
@@ -68,6 +176,7 @@ export default function PatientPortal() {
             type="file"
             accept="image/png, image/jpeg, application/pdf"
             className="absolute inset-0 opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
+            onChange={handleFileUpload}
             disabled={loading}
           />
           <div className="space-y-3 pointer-events-none">

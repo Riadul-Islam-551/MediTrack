@@ -1,8 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
-import { PatientProfile, MedicalRecord } from "@/app/types/medical";
+import {
+  PatientProfile,
+  MedicalRecord,
+  Medicine,
+  TestResult,
+} from "@/app/types/medical";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 
 const TABS = [
   "Antibiotics",
@@ -12,6 +18,7 @@ const TABS = [
 ] as const;
 
 export default function DoctorPortal() {
+  const { state } = useLocalStorage();
   const [searchId, setSearchId] = useState<string>("");
   const [activePatient, setActivePatient] = useState<PatientProfile | null>(
     null,
@@ -26,7 +33,37 @@ export default function DoctorPortal() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setConsoleError(null);
+    if (!state) return;
+
+    const patient = state.patients.find(
+      (p) => p.patientId.trim().toUpperCase() === searchId.trim().toUpperCase(),
+    );
+
+    if (patient) {
+      if (patient.status === "Suspended") {
+        setConsoleError(
+          "Access Denied: This clinical record has been explicitly suspended by administrative authority overrides.",
+        );
+        setActivePatient(null);
+        return;
+      }
+      setActivePatient(patient);
+      setSelectedRecord(null);
+    } else {
+      setConsoleError(
+        "No corresponding health records matching that target identification parameter found.",
+      );
+      setActivePatient(null);
+    }
   };
+
+  if (!state) {
+    return (
+      <div className="p-12 text-center text-slate-500 text-sm font-medium animate-pulse tracking-wide">
+        Loading Diagnostic Intelligence Databases...
+      </div>
+    );
+  }
 
   // Aggregate global analytics structures
   const allHistoricalMedicines =
@@ -207,7 +244,7 @@ export default function DoctorPortal() {
                     })}
                   </div>
 
-                  <div className="bg-slate-950/60 rounded-xl border border-slate-850 p-4 min-h-[140px]">
+                  <div className="bg-slate-950/60 rounded-xl border border-slate-850 p-4 min-h-35">
                     <AnimatePresence mode="wait">
                       {currentTabMedicines.length > 0 ? (
                         <motion.div
@@ -312,7 +349,7 @@ export default function DoctorPortal() {
                   Historical Encounters Ledger
                 </h3>
 
-                <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+                <div className="space-y-2.5 max-h-90 overflow-y-auto pr-1">
                   {activePatient.records.map((rec) => {
                     const isSelected =
                       selectedRecord?.recordId === rec.recordId;
